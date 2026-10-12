@@ -1,0 +1,141 @@
+# jarvis-assistant config
+#
+# This is the template. Copy it to config.yaml (which git ignores) and edit
+# that one:   cp config.example.yaml config.yaml
+
+# Master debug switch. When it's false Jarvis doesn't write anything to /tmp.
+# (the action log in the `logging` section below is separate, that one is
+# supposed to be there). Turn this on only while you're debugging tool calling
+# or TTS. It dumps full prompts and tool call arguments to
+# /tmp/jarvis-debug.log, which most systems let anyone read.
+debug: false
+
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen3:8b"
+  # How many seconds after Jarvis exits before the model gets unloaded from RAM.
+  # I keep it short because I care more about using nothing when idle than about
+  # fast follow-ups.
+  # Heads up: confirm-tier actions (close_app, edit_file) wait on you, and if
+  # that wait plus the time you take to answer is longer than this, Ollama can
+  # unload the model mid-conversation, and then it has to cold reload after you
+  # say "yes". If that's annoying raise this (like "30s").
+  keep_alive: "10s"
+  # true turns off Qwen3's <think> reasoning so replies are faster, which is
+  # better for a voice assistant. Turn it off if you want it to think harder.
+  disable_thinking: true
+
+voice:
+  # Seconds to record in --voice mode. Only used as a fallback if sox's `rec`
+  # (the silence detecting one) isn't installed.
+  record_seconds: 6
+  # Silence detection (when sox `rec` is installed, which is the normal path).
+  # If your mic picks up fan/room noise, raise silence_threshold (like "6%").
+  silence_threshold: "5%"
+  silence_duration_seconds: 1.2
+  # Hard cap: recording always stops by this point, even if the noise floor
+  # never goes below the silence threshold.
+  max_record_seconds: 15
+  # CPU threads for whisper.cpp. Raise toward your core count to go faster.
+  whisper_threads: 4
+  # --- Hallucination settings (whisper.cpp) ---
+  no_speech_threshold: 0.7
+  logprob_threshold: -1.0
+  entropy_threshold: 2.4
+  no_temperature_fallback: true
+  # --- Second pass correction ---
+  # Sends the raw transcript back through the model once to fix obvious
+  # mishears/hallucinations, using custom_vocabulary below. It costs one extra
+  # small LLM call per voice command. Leave it on if you have any
+  # custom_vocabulary, since that's the whole point of it.
+  correction_enabled: true
+  # Paths to the whisper.cpp binary and model (see README). Relative paths are
+  # relative to the project folder.
+  # These assume whisper.cpp is cloned NEXT TO jarvis-assistant, like
+  # ~/whisper.cpp and ~/jarvis-assistant. Change them if yours is somewhere else.
+  whisper_binary: "../whisper.cpp/build/bin/whisper-cli"
+  whisper_model: "../whisper.cpp/models/ggml-base.en.bin"
+  sample_rate: 16000
+
+  # Words whisper wouldn't guess right on its own (app names, game titles,
+  # slang). They bias the first decode AND get used by the correction pass
+  # above. Add your own, like:
+  #   custom_vocabulary:
+  #     - "lethalcompany"
+  # (app names from allowed_apps are included automatically)
+  custom_vocabulary: []
+
+memory:
+  # Off by default, but it's the setting you probably want to turn on yourself.
+  # When it's on, Jarvis remembers the last few turns for ttl_seconds after
+  # each reply so things like "now edit it" or "yes" make sense (see session.py).
+  # It's off by default because of a small privacy thing: your recent
+  # prompts and replies get stored in a plain JSON file between calls instead of
+  # disappearing when Jarvis exits. Fine to turn on if you're ok with that.
+  enabled: false
+  ttl_seconds: 300
+  max_turns: 12
+  session_path: "~/.local/share/jarvis-assistant/session.json"
+
+# Apps Jarvis is allowed to open. Add your own. If an app isn't in this list
+# Jarvis will refuse to open it, no exceptions.
+#
+# Each entry is either:
+#   name: "launch command"
+# or, if it shouldn't be closable (see the Steam example below):
+#   name:
+#     cmd: "launch command"
+#     closable: false
+#
+# close_app works by matching the RUNNING PROCESS NAME of the first word of
+# the launch command. It does NOT remember what Jarvis opened. So it closes
+# every process with that name at once ("close terminal" closes ALL open
+# terminal windows), and it only works if the launch command's process is the
+# same one that needs to be closed.
+#
+# The commands below are examples. Use whatever is installed on YOUR system,
+# e.g. the file manager is "nemo" on Linux Mint, "nautilus" on Ubuntu/GNOME,
+# "dolphin" on KDE, and the terminal might be "gnome-terminal", "konsole", etc.
+# Delete the ones you don't have.
+allowed_apps:
+  firefox: "firefox"
+  files: "nemo"
+  terminal: "gnome-terminal"
+  spotify: "spotify"
+  vscode: "code"
+  # Example: a Steam game. These launch with a steam:// link, which just hands
+  # things to the Steam client, so there's no separate process for the game,
+  # only "steam". Keep closable: false on these, otherwise "close <game>" would
+  # close the WHOLE Steam client. (Find the id in the game's Steam store URL.)
+  #
+  # mygame:
+  #   cmd: "steam steam://rungameid/12345"
+  #   closable: false
+
+# The folder that file search, read, edit, and zip are allowed to touch.
+# Jarvis never goes outside of it, no matter what the prompt says. Narrow it
+# (like "~/Documents") if you don't want it to see your whole home folder.
+file_search_root: "~/"
+
+# Tool tiers:
+#   read    -> runs right away, can't change anything
+#   action  -> runs right away but gets logged (low risk, reversible)
+#   confirm -> needs a yes/no popup first
+logging:
+  enabled: true
+  path: "~/.local/share/jarvis-assistant/actions.log"
+  # The log gets trimmed to this many newest lines every time it's written to,
+  # so it doesn't grow forever.
+  max_lines: 5000
+
+tts:
+  # "espeak" is the default because it's what install.sh actually installs, so
+  # it talks right after a fresh clone with no extra setup. "piper" sounds a lot
+  # better but needs a voice model that install.sh does NOT download. Read the
+  # README's piper section before switching, or Jarvis will quietly fall back
+  # to espeak and it'll look like the setting did nothing.
+  engine: "espeak"
+  piper_model: "~/piper-voices/en_US-hfc_male-medium.onnx"
+  # Only applies to piper (it goes through ffmpeg to change the volume).
+  # espeak has no volume setting here, use your system volume.
+  volume: 1.5

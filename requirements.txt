@@ -1,0 +1,8 @@
+requests>=2.31
+psutil>=5.9
+PyYAML>=6.0
+
+# only needed if you set tts.engine to "piper" in config.yaml instead of the
+# default "espeak". you also need a voice model + ffmpeg, see the README's
+# piper section
+piper-tts>=1.2

@@ -1,0 +1,14 @@
+# python virtual env + caches
+.venv/
+__pycache__/
+*.pyc
+
+# editor stuff
+.vscode/
+.idea/
+
+# backups jarvis makes when it edits files
+*.bak-*
+
+# personal config (copy config.example.yaml to this)
+config.yaml
